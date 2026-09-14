@@ -440,7 +440,7 @@ html:not(.unlocked) #draftGate{display:flex;}
           <li><span class="mk mk-pol"></span>RNA 중합효소</li>
           <li><span class="mk mk-prom"></span>프로모터</li>
           <li><span class="mk mk-dna"></span>DNA — 위 가닥이 주형이다</li>
-          <li><span class="mk mk-rna"></span>새로 이어지는 라이보뉴클레오타이드</li>
+          <li><span class="mk mk-rna"></span>라이보뉴클레오타이드 — 이어져 <b>한 가닥의 RNA</b> 가 된다</li>
           <li><span class="mk mk-arrow"></span>전사 방향 — 중합효소가 나아가는 쪽</li>
         </ul>
       </div>
@@ -973,11 +973,14 @@ function renderStrand(){
    ★타이머를 쓰지 않는다 — ▶ 를 누를 때만 국면이 바뀐다. */
 var TG = {
   x0:96, pitch:22, n:26,
-  yTop:118, yBot:166, yPol:142, yOff:250,   /* ★떨어져 나온 중합효소는 오른쪽 아래로 — 위로 보내면 이름표가 무대 밖으로 나간다(실측) */
-  yTail:244, yFree:280,   /* ★떨어져 나온 RNA 는 「유전자」 이름표보다 아래에 둔다 — 위에 두면 글자와 겹쳐 보인다(실측) */
+  yTop:118, yBot:166, yPol:142, yOff:262,   /* ★떨어져 나온 중합효소는 오른쪽 아래로 — 위로 보내면 이름표가 무대 밖으로 나간다(실측) */
+  /* ★떨어져 나온 RNA — 거품에서 멀어질수록 yDrop 씩 내려가 yTail 에서 눕는다.
+     ★★평평한 한 줄에 뚝 떨어뜨렸더니 「뉴클레오타이드가 하나씩 분리된다」로 읽혔다(교사 지적 2026-09-14).
+       이어진 한 가닥으로 흘러내리게 하고, 뒤에 등뼈(tx_rnabb)를 깔아 낱낱이 아님을 못박는다. */
+  yTail:190, yDrop:9, yFree:282,
   bulgeUnit:7, half:2, pairDrop:20,
   promFrom:2, promTo:6, geneFrom:8, geneTo:22,
-  yArrow:88, yBracket:194
+  yArrow:88, yBracket:232
 };
 var TX_PAIRED = 3;                 /* 거품 안에 붙어 있는 채로 남는 라이보뉴클레오타이드 수 */
 function tgx(i){ return TG.x0 + TG.pitch * (i + 0.5); }
@@ -1003,7 +1006,8 @@ var TX_CAP = [
   '중합효소가 있는 자리에서만 이중나선이 <b>풀린다</b>. 유전자 전체가 한꺼번에 풀리지 않는다.',
   '풀린 자리에서 <b>주형 가닥</b>에 상보적인 <b>라이보뉴클레오타이드</b> 하나가 붙는다. 여기서부터 RNA 가 시작된다.',
   '중합효소가 오른쪽으로 나아간다. 풀린 자리도 함께 옮겨 가고, 그 안에서 RNA 가 <b>5′ → 3′</b> 방향으로 길어진다.',
-  '중합효소가 <b>지나간 자리의 DNA 는 다시 이중나선을 형성</b>한다. 그리고 만들어진 RNA 는 <b>주형 가닥에서 떨어져 나온다.</b>',
+  '중합효소가 <b>지나간 자리의 DNA 는 다시 이중나선을 형성</b>한다. 그리고 만들어진 RNA 는 <b>주형 가닥에서 떨어져 나온다.</b> ' +
+  '이때 떨어지는 것은 <b>이어진 한 가닥 전체</b>이다 — 뉴클레오타이드가 하나씩 흩어지는 것이 아니다.',
   '중합효소가 유전자 끝에 이르렀다. RNA 는 유전자 길이만큼 만들어졌다.',
   '<b>합성된 RNA 가 방출된다.</b> 풀렸던 DNA 는 모두 다시 이중나선이 되었다.',
   '<b>RNA 중합효소도 DNA 에서 떨어져 나온다.</b> DNA 는 처음 모습 그대로이고, 새로 생긴 것은 RNA 하나뿐이다.'
@@ -1032,19 +1036,31 @@ function txLayout(ph){
     var col = TG.geneFrom + i, cx = tgx(col);
     var pairY = TG.yTop - tgBulge(col, c) + TG.pairDrop;
     if (p >= TX_PH_RELEASE){
-      beads.push({ i:i, x:cx - (p >= TX_PH_OFF ? 70 : 40), y:(p >= TX_PH_OFF ? TG.yFree + 10 : TG.yFree), op:1, where:'free' });
+      /* 방출된 뒤에는 물결 모양으로 눕는다 — 곧은 막대로 두면 자와 구별되지 않는다 */
+      beads.push({ i:i, x:cx - (p >= TX_PH_OFF ? 70 : 40),
+                   y:(p >= TX_PH_OFF ? TG.yFree + 10 : TG.yFree) + 7 * Math.sin(i * 0.9),
+                   op:1, where:'free' });
     } else if (i >= made){
       beads.push({ i:i, x:cx, y:pairY, op:0, where:'none' });
     } else if (c >= 0 && i >= made - TX_PAIRED){
       beads.push({ i:i, x:cx, y:pairY, op:1, where:'pair' });
     } else {
-      beads.push({ i:i, x:cx - 6, y:TG.yTail, op:1, where:'tail' });
+      /* ★거품에서 멀어진 만큼만 내려간다 — 이어진 한 가닥이 흘러내리는 모양이다 */
+      var back = Math.max(1, (c >= 0 ? c : TG.geneTo) - col - TX_PAIRED + 1);
+      beads.push({ i:i, x:cx - 4, y:Math.min(TG.yTail, TG.yTop + TG.pairDrop + back * TG.yDrop),
+                   op:1, where:'tail' });
     }
   }
+  /* ★등뼈 — 만들어진 라이보뉴클레오타이드를 차례로 잇는다. 낱낱이 아니라 한 가닥임을 그림이 말한다. */
+  var link = [];
+  for (i = 0; i < beads.length; i++) if (beads[i].op > 0) link.push({ x:beads[i].x, y:beads[i].y });
   return {
     ph:p, made:made, bubble:c, polcol:polc,
-    cols:cols, rungs:rungs, beads:beads,
-    pol:{ x:tgx(polc >= 0 ? polc : 4), y:(p >= TX_PH_OFF ? TG.yOff : TG.yPol), op:(polc >= 0 ? 1 : 0) },
+    cols:cols, rungs:rungs, beads:beads, link:link,
+    /* ★이름표는 중합효소 위에 붙는다. 다만 떨어져 나온 국면에서는 78px 위가 DNA 두 가닥 위에 얹혀
+       「아직 붙어 있다」로 보인다 — 그 국면만 57px 위로 올려 DNA 아래 빈자리에 둔다(실측). */
+    pol:{ x:tgx(polc >= 0 ? polc : 4), y:(p >= TX_PH_OFF ? TG.yOff : TG.yPol), op:(polc >= 0 ? 1 : 0),
+          labY:(p >= TX_PH_OFF ? TG.yOff - 62 : TG.yPol - 78) },
     arrow:{ op:(p >= TX_PH_OPEN && p <= TX_PH_END) ? 1 : 0 },
     band:TX_BAND[p],
     step:TX_STEPS[p], cap:TX_CAP[p]
@@ -1080,7 +1096,7 @@ function txStageSvg(){
     s += '<line x1="' + x + '" y1="' + (TG.yBot + 10) + '" x2="' + (x + 24) + '" y2="' + (TG.yTop - 10) +
          '" stroke="' + C_DNA_INK + '" stroke-width="1.5" opacity=".5"/>';
   }
-  s += txt('', (pl + pr) / 2, TG.yBot + 44, '프로모터', 14, C_DNA_INK, 'middle', 700);
+  s += txt('', (pl + pr) / 2, TG.yBracket + 18, '프로모터', 14, C_DNA_INK, 'middle', 700);
 
   /* 유전자 구간 표시 */
   s += '<path d="M' + gl + ',' + TG.yBracket + ' L' + gl + ',' + (TG.yBracket + 8) + ' L' + gr + ',' + (TG.yBracket + 8) +
@@ -1106,6 +1122,9 @@ function txStageSvg(){
        ' Z" fill="#444"/></g>';
   /* ★화살표에 글자를 붙이지 않는다 — 중합효소 이름표가 국면마다 이 자리를 지나가며 겹친다(실측).
      방향의 이름은 무대 아래 범례가 맡는다(1-5 에서 얻은 규칙). */
+  /* ★RNA 의 등뼈 — 구슬보다 먼저 그려 뒤에 깔린다. 구슬이 하나씩 떨어져 나가는 것처럼 보이던 것을 잇는다. */
+  s += '<path id="tx_rnabb" class="rfade" fill="none" stroke="' + C_RNA +
+       '" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round" opacity="0"/>';
   /* 라이보뉴클레오타이드 — 흰 점을 함께 찍어 색만으로 구분시키지 않는다 */
   for (i = 0; i < N; i++){
     s += '<g id="tx_rb_' + i + '" class="rmove" opacity="0"><circle r="8" fill="' + C_RNA +
@@ -1134,8 +1153,17 @@ function txApply(ph){
   for (i = 0; i < L.beads.length; i++){
     putAt('tx_rb_' + i, L.beads[i].x, L.beads[i].y, L.beads[i].op);
   }
+  var bb = document.getElementById('tx_rnabb');
+  if (bb){
+    var d = '';
+    for (i = 0; i < L.link.length; i++){
+      d += (i ? ' L' : 'M') + (Math.round(L.link[i].x * 10) / 10) + ',' + (Math.round(L.link[i].y * 10) / 10);
+    }
+    if (d) bb.setAttribute('d', d);
+    bb.setAttribute('opacity', L.link.length >= 2 ? '1' : '0');
+  }
   putAt('tx_pol', L.pol.x, L.pol.y, L.pol.op);
-  putAt('tx_polb', L.pol.x, L.pol.y - 78, L.pol.op);
+  putAt('tx_polb', L.pol.x, L.pol.labY, L.pol.op);
   fadeTo('tx_arrow', L.arrow.op);
   ['init', 'elong', 'term'].forEach(function(k){
     var on = (L.band === k);

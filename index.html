@@ -2196,5 +2196,71 @@ function init(){
 if (typeof document !== 'undefined' && document.getElementById) init();
 if (typeof window !== 'undefined' && window.addEventListener) window.addEventListener('resize', stickyCenter);
 </script>
+<!-- ▼ 접속 기록 (정본: _접속기록/기록조각.html · _붙이기.js 로 넣는다 · 손으로 고치지 말 것) -->
+<script>
+(function(){
+  var APP = 'transcription-sim';
+  var DB = 'https://geung-hub-stats-default-rtdb.asia-southeast1.firebasedatabase.app';
+  var HOST = 'geungschool-hub.github.io';
+  function wait(ms){ return new Promise(function(ok){ setTimeout(ok, ms); }); }
+  function getText(url, ms){
+    var ac = (typeof AbortController === 'function') ? new AbortController() : null;
+    var timer = setTimeout(function(){ if (ac) ac.abort(); }, ms);
+    return Promise.race([
+      fetch(url, ac ? { signal: ac.signal, cache: 'no-store' } : { cache: 'no-store' })
+        .then(function(r){ if (!r.ok) throw 0; return r.text(); }),
+      wait(ms).then(function(){ throw 0; })
+    ]).then(function(v){ clearTimeout(timer); return v; },
+            function(e){ clearTimeout(timer); throw e; });
+  }
+  function hex(buf){
+    return Array.prototype.map.call(new Uint8Array(buf), function(b){ return ('0' + b.toString(16)).slice(-2); }).join('');
+  }
+  function network(){
+    try {
+      var ip = getText('https://api.ipify.org', 2000).then(function(s){
+        s = String(s).trim();
+        if (!/^[0-9a-fA-F.:]{3,45}$/.test(s)) throw 0;
+        return crypto.subtle.digest('SHA-256', new TextEncoder().encode('hubstats|' + s)).then(hex);
+      });
+      var nets = getText(DB + '/config/schoolNets.json', 2000).then(function(s){ return JSON.parse(s) || {}; });
+      return Promise.all([ip, nets]).then(function(v){
+        return Object.prototype.hasOwnProperty.call(v[1], v[0]) ? 'school' : 'other';
+      }, function(){ return 'unknown'; });
+    } catch (e) { return Promise.resolve('unknown'); }
+  }
+  function send(){
+    try {
+      if (location.protocol !== 'https:' || location.hostname !== HOST) return;
+      if (!window.fetch || !window.crypto || !crypto.getRandomValues) return;
+      var ls = null;
+      try { ls = window.localStorage; } catch (e) {}
+      var d = null;
+      try { d = ls && ls.getItem('hubstats_dev'); } catch (e) {}
+      if (!/^[a-z0-9]{16}$/.test(d || '')) {
+        var abc = 'abcdefghijklmnopqrstuvwxyz0123456789', r = new Uint32Array(16);
+        crypto.getRandomValues(r);
+        d = '';
+        for (var i = 0; i < 16; i++) d += abc[r[i] % 36];
+        try { if (ls) ls.setItem('hubstats_dev', d); } catch (e) {}
+      }
+      var t = false;
+      try { t = !!ls && ls.getItem('hubstats_teacher') === '1'; } catch (e) {}
+      network().then(function(n){
+        return fetch(DB + '/visits.json', {
+          method: 'POST', keepalive: true,
+          headers: { 'Content-Type': 'text/plain' },
+          body: JSON.stringify({ a: APP, ts: { '.sv': 'timestamp' }, d: d, t: t, n: n })
+        });
+      }).catch(function(){});
+    } catch (e) {}
+  }
+  try {
+    if (document.readyState === 'complete') setTimeout(send, 1000);
+    else window.addEventListener('load', function(){ setTimeout(send, 1000); });
+  } catch (e) {}
+})();
+</script>
+<!-- ▲ 접속 기록 -->
 </body>
 </html>

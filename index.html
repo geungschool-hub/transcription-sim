@@ -290,6 +290,9 @@ table.t td.seqcell{font-family:'Consolas','Menlo',monospace;letter-spacing:1px;f
 .pq-card .expl{margin-top:11px;background:var(--amber-bg);border-left:4px solid var(--amber);
                border-radius:0 9px 9px 0;padding:10px 13px;font-size:15.5px;line-height:1.75;}
 .pq-card .expl b{color:var(--amber-ink);}
+.cellask{border:1.5px solid #B9C2CC;border-radius:10px;background:#fff;padding:10px 12px;margin:10px 0;}
+.cellask .cq{font-size:16px;font-weight:800;margin:0 0 8px;}
+.cellask .choice{width:100%;margin:0 0 6px;}
 .datbox{background:var(--blue-bg);border-left:4px solid var(--blue);border-radius:0 9px 9px 0;
         padding:10px 13px;font-size:15.5px;line-height:1.8;margin-top:10px;}
 .datbox ul{margin:6px 0 0;padding-left:20px;}
@@ -554,26 +557,27 @@ html:not(.unlocked) #draftGate{display:flex;}
 
   <!-- ══ ⑥ 어디서 일어나는가 ══ -->
   <div class="card split" id="cardCell" data-hub-card="s6">
-    <h2 class="teal">⑥ 원핵과 진핵 — 어디서 일어나는가<span class="yr">교과서 65쪽</span></h2>
+    <h2 class="teal">⑥ 원핵과 진핵 — 번역은 언제·어디서 시작되는가<span class="yr">교과서 65쪽</span></h2>
     <div class="panes">
       <div class="pane-l">
         <div class="stage-wrap"><svg class="stage" id="clStage" viewBox="0 0 700 320" xmlns="http://www.w3.org/2000/svg" role="img"
-             aria-label="원핵세포와 진핵세포를 나란히 놓고 번역이 시작되는 자리를 고르는 무대"></svg></div>
+             aria-label="원핵세포와 진핵세포를 나란히 놓고, 오른쪽 단추로 고른 자리에 라이보솜이 붙는 무대"></svg></div>
       </div>
       <div class="pane-r">
         <div class="pr-do">
-          <div class="taskbar">두 세포에서 <b>번역이 시작되는 자리</b>를 각각 찍으시오.</div>
+          <div class="taskbar">세포마다 <b>라이보솜이 RNA 에 처음 붙는 자리</b>를 아래 단추에서 고르시오.</div>
           <div class="panel">
             <div class="ptitle">🔎 무엇이 다른가</div>
             <p>원핵세포에는 <b>핵막이 없다</b>. 진핵세포에서는 DNA 가 핵 안에 있고 라이보솜은 세포질에 있다.</p>
           </div>
+          <div id="cellAsk"></div>
           <div id="cellVerdict"></div>
           <div class="msg hide" id="fb_cell"></div>
         </div>
         <div class="pr-q"><div id="cellQ"></div></div>
       </div>
     </div>
-    <div class="secreset"><button type="button" onclick="resetSec('cell')">↻ ⑥ 다시 찍기</button></div>
+    <div class="secreset"><button type="button" onclick="resetSec('cell')">↻ ⑥ 다시 고르기</button></div>
   </div>
 
   <!-- ══ 💪 더 풀어 보기 ══ -->
@@ -811,7 +815,7 @@ var STEPS = [
   { key:'grid',   no:'③', name:'직접 전사하기',       sub:'A 에는 U',           cls:'rna'  },
   { key:'result', no:'④', name:'복제와 무엇이 다른가', sub:'세 줄 견주기',       cls:'dna'  },
   { key:'rna',    no:'⑤', name:'RNA 는 한 종류가 아니다', sub:'mRNA·rRNA·tRNA', cls:'ribo' },
-  { key:'cell',   no:'⑥', name:'어디서 일어나는가',   sub:'원핵 · 진핵',        cls:'teal' }
+  { key:'cell',   no:'⑥', name:'번역은 언제·어디서',  sub:'원핵 · 진핵',        cls:'teal' }
 ];
 function rnaFilled(){
   var n = 0, i;
@@ -1389,24 +1393,31 @@ var RN_GENES = [
   { k:'t', mark:'㉰', x:550, name:'tRNA', full:'운반 RNA',   color:C_TRNA,
     role:'단백질합성을 위해 <b>아미노산을 라이보솜으로 운반</b>한다.' }
 ];
+/* ★세 RNA 를 모두 **같은 굵기의 한 가닥 선**으로 그린다 — 모양만 다르다(펼친 가닥 · 접힌 가닥 · 클로버잎).
+   2026-10-14 교사: 「rRNA 를 라이보솜 덩어리로 그려 마치 라이보솜이 전사의 결과물 같다」 → 덩어리(채운 타원·삼각형)를 쓰지 않는다.
+   rRNA 가 라이보솜을 이룬다는 말은 오른쪽 정보 상자에만 둔다. */
 function rnShape(g){
-  var y = 210, s = '';
+  var y = 210, x = g.x, s = '', st = ' fill="none" stroke="' + g.color + '" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"';
   if (g.k === 'm'){
-    s += '<path d="M' + (g.x - 56) + ',' + y + ' q14,-14 28,0 q14,14 28,0 q14,-14 28,0" fill="none" stroke="' +
-         g.color + '" stroke-width="7" stroke-linecap="round"/>';
-    s += '<circle cx="' + (g.x - 46) + '" cy="' + (y - 6) + '" r="2.4" fill="#fff"/>';
+    s += '<path d="M' + (x - 56) + ',' + y + ' q14,-14 28,0 q14,14 28,0 q14,-14 28,0 q14,14 28,0"' + st + '/>';
   } else if (g.k === 'r'){
-    s += '<ellipse cx="' + g.x + '" cy="' + (y - 8) + '" rx="34" ry="17" fill="' + g.color + '"/>';
-    s += '<ellipse cx="' + g.x + '" cy="' + (y + 14) + '" rx="26" ry="12" fill="' + g.color + '" fill-opacity=".75"/>';
-    s += '<circle cx="' + (g.x - 14) + '" cy="' + (y - 12) + '" r="3" fill="#fff"/>';
+    /* 한 가닥이 두 번 접혀 머리핀 고리를 만든다 */
+    s += '<path d="M' + (x - 56) + ',' + (y + 10) + ' L' + (x - 30) + ',' + (y + 10) +
+         ' L' + (x - 30) + ',' + (y - 16) + ' a9,9 0 0 1 18,0 L' + (x - 12) + ',' + (y + 10) +
+         ' L' + (x + 8) + ',' + (y + 10) + ' L' + (x + 8) + ',' + (y - 16) + ' a9,9 0 0 1 18,0 L' + (x + 26) + ',' + (y + 10) +
+         ' L' + (x + 54) + ',' + (y + 10) + '"' + st + '/>';
   } else {
-    s += '<path d="M' + (g.x - 22) + ',' + (y - 20) + ' L' + (g.x + 22) + ',' + (y - 20) + ' L' + g.x + ',' + (y + 20) +
-         ' Z" fill="' + g.color + '"/>';
-    s += '<circle cx="' + (g.x - 22) + '" cy="' + (y - 20) + '" r="7" fill="' + g.color + '"/>';
-    s += '<circle cx="' + (g.x + 22) + '" cy="' + (y - 20) + '" r="7" fill="' + g.color + '"/>';
-    s += '<circle cx="' + g.x + '" cy="' + (y - 8) + '" r="3" fill="#fff"/>';
+    /* 클로버잎 — 줄기 하나에 고리 셋, 모두 선으로 */
+    s += '<path d="M' + x + ',' + (y + 26) + ' L' + x + ',' + (y - 2) + '"' + st + '/>';
+    s += '<path d="M' + x + ',' + (y - 2) + ' L' + (x - 14) + ',' + (y - 2) + ' M' + x + ',' + (y - 2) + ' L' + (x + 14) + ',' + (y - 2) +
+         ' M' + x + ',' + (y - 2) + ' L' + x + ',' + (y - 16) + '"' + st + '/>';
+    s += '<circle cx="' + (x - 24) + '" cy="' + (y - 2) + '" r="10"' + st + '/>';
+    s += '<circle cx="' + (x + 24) + '" cy="' + (y - 2) + '" r="10"' + st + '/>';
+    s += '<circle cx="' + x + '" cy="' + (y - 26) + '" r="10"' + st + '/>';
   }
-  s += txt('', g.x, y + 46, g.name, 15, g.color, 'middle', 800);
+  var p5 = (g.k === 'm') ? [x - 56, y] : (g.k === 'r') ? [x - 56, y + 10] : [x, y + 26];
+  s += '<circle cx="' + p5[0] + '" cy="' + p5[1] + '" r="2.4" fill="#fff"/>';
+  s += txt('', x, y + 46, g.name, 15, g.color, 'middle', 800);
   return s;
 }
 function rnStageSvg(){
@@ -1474,23 +1485,12 @@ function renderRnaCard(){
    교과서 65쪽 끝 — 원핵세포는 전사가 시작되면 곧바로 번역이 시작되고,
    진핵세포는 전사 뒤 mRNA 가 핵공을 지나 세포질로 나간 다음 번역이 일어난다. */
 var CELL_ANS = { pro:1, euk:2 };
+/* t = 그림 이름표이자 단추 문구(둘을 똑같이 맞춘다) · x,y = 고르면 라이보솜이 붙는 자리 */
 var CELL_SPOT = {
-  pro:[ { n:1, x:290, y:120, t:'전사 중인 RNA' }, { n:2, x:290, y:206, t:'전사가 끝난 RNA' } ],
-  euk:[ { n:1, x:480, y:138, t:'핵 안' },        { n:2, x:640, y:238, t:'세포질' } ]
+  pro:[ { n:1, x:186, y:124, t:'전사가 끝나기 전 — 전사 중인 RNA' }, { n:2, x:190, y:206, t:'전사가 끝난 뒤 — 떨어져 나온 RNA' } ],
+  euk:[ { n:1, x:484, y:134, t:'핵 안 — 전사 중인 RNA' },          { n:2, x:648, y:202, t:'세포질 — 핵공을 나온 mRNA' } ]
 };
-function spotSvg(side, sp){
-  var picked = state.cellPick[side] === sp.n;
-  var right = (picked && sp.n === CELL_ANS[side]);
-  var col = !picked ? '#8A93A0' : (right ? '#2A7A38' : '#C0392B');
-  var mark = (sp.n === 1) ? '㉠' : '㉡';
-  var s = '<g style="cursor:pointer" onclick="pickCell(&#39;' + side + '&#39;,' + sp.n + ')">';
-  s += '<circle cx="' + sp.x + '" cy="' + sp.y + '" r="20" fill="#fff" stroke="' + col + '" stroke-width="' +
-       (picked ? 4 : 2.4) + '"/>';
-  s += txt('', sp.x, sp.y + 6, mark, 16, col, 'middle', 800);
-  s += txt('', sp.x, sp.y + 34, sp.t, 12, '#5A6270', 'middle', 600);
-  s += '</g>';
-  return s;
-}
+var CELL_Q = { pro:'🦠 원핵세포 — 라이보솜이 RNA 에 붙는 때는?', euk:'🧫 진핵세포 — 라이보솜이 RNA 에 붙는 곳은?' };
 /* 물결 모양 RNA 한 도막 — 시작점과 길이만 받는다 */
 function wave(x, y, w, col, op){
   var q = w / 4;
@@ -1503,6 +1503,16 @@ function riboSvg(x, y, dim){
          (dim ? '" fill-opacity=".55' : '') + '"/><circle cx="' + (x - 7) + '" cy="' + (y - 4) +
          '" r="2.6" fill="#fff"/>';
 }
+/* 고른 자리에 라이보솜을 붙인다 — 맞으면 진하게, 틀리면 흐리게 + ✕ */
+function placedRibo(side){
+  var p = state.cellPick[side]; if (!p) return '';
+  var sp = CELL_SPOT[side].filter(function(x){ return x.n === p; })[0]; if (!sp) return '';
+  var right = (p === CELL_ANS[side]), s = riboSvg(sp.x, sp.y, !right);
+  var edge = sp.x > 600;   /* 세포 오른쪽 끝 가까이면 이름표를 위에 단다(잘리지 않게) */
+  s += txt('', edge ? sp.x : sp.x + 24, edge ? sp.y - 18 : sp.y + 5, right ? '라이보솜' : '✕', right ? 12.5 : 18,
+           right ? C_RIBO : '#C0392B', edge ? 'middle' : 'start', 800);
+  return s;
+}
 function clStageSvg(){
   var s = '';
   /* ── 원핵세포 — 핵막이 없다 ── */
@@ -1512,31 +1522,40 @@ function clStageSvg(){
   s += txt('', 46, 54, 'DNA', 12.5, C_DNA_INK, 'start', 700);
   s += '<ellipse cx="132" cy="67" rx="26" ry="22" fill="' + C_POL + '" fill-opacity=".18" stroke="' + C_POL + '" stroke-width="2.4"/>';
   s += '<path d="M132,86 q16,20 34,30" fill="none" stroke="' + C_RNA + '" stroke-width="5" stroke-linecap="round"/>';
-  s += riboSvg(182, 126, false);
-  s += txt('', 46, 130, '전사가 끝나기 전에', 12.5, '#5A6270', 'start', 600);
-  s += txt('', 46, 146, '라이보솜이 붙었다', 12.5, '#5A6270', 'start', 600);
-  s += wave(60, 200, 108, C_RNA, '');
-  s += riboSvg(196, 206, true);
-  s += txt('', 60, 178, '전사가 끝나 떨어진 RNA', 12.5, '#5A6270', 'start', 600);
+  s += txt('', 46, 118, '전사 중인 RNA', 13, C_RNA_INK, 'start', 700);
+  s += wave(60, 206, 108, C_RNA, '');
+  s += txt('', 60, 184, '떨어져 나온 RNA', 13, C_RNA_INK, 'start', 700);
   /* ── 진핵세포 — 핵막이 있다 ── */
   s += '<rect x="356" y="34" width="330" height="268" rx="26" fill="#FBFCFE" stroke="#8A93A0" stroke-width="2.5"/>';
   s += txt('', 521, 24, '진핵세포 — 핵막이 있다', 15, C_INK, 'middle', 800);
-  s += '<ellipse cx="452" cy="104" rx="80" ry="56" fill="#EFF1F5" stroke="#8A93A0" stroke-width="2.5"/>';
+  s += '<ellipse cx="458" cy="106" rx="92" ry="64" fill="#EFF1F5" stroke="#8A93A0" stroke-width="2.5"/>';
   s += txt('', 392, 62, '핵', 13, '#5A6270', 'start', 700);
   s += '<rect x="404" y="96" width="104" height="9" rx="4.5" fill="' + C_DNA + '"/>';
   s += '<ellipse cx="436" cy="101" rx="22" ry="18" fill="' + C_POL + '" fill-opacity=".18" stroke="' + C_POL + '" stroke-width="2.2"/>';
   s += '<path d="M436,118 q14,14 30,20" fill="none" stroke="' + C_RNA + '" stroke-width="5" stroke-linecap="round"/>';
-  s += '<circle cx="532" cy="104" r="8" fill="#fff" stroke="#8A93A0" stroke-width="2.2"/>';
-  s += txt('', 544, 94, '핵공', 12.5, '#5A6270', 'start', 600);
-  s += '<path d="M540,112 q34,40 66,64" fill="none" stroke="' + C_RNA + '" stroke-width="4" stroke-linecap="round" stroke-dasharray="9,6"/>';
-  s += wave(560, 196, 96, C_RNA, '');
-  s += riboSvg(646, 202, false);
-  /* ★「핵공을 지나 나온 mRNA」 라는 글은 넣지 않는다 — 핵공 이름표와 점선이 이미 그 말을 하고 있고,
-     둘 곳마다 점선·㉡ 과 겹쳤다(실측). 보면 아는 것을 글로 또 적지 않는다. */
-  /* 고르는 자리 */
-  CELL_SPOT.pro.forEach(function(sp){ s += spotSvg('pro', sp); });
-  CELL_SPOT.euk.forEach(function(sp){ s += spotSvg('euk', sp); });
+  s += txt('', 458, 160, '전사 중인 RNA', 12.5, C_RNA_INK, 'middle', 700);
+  s += '<circle cx="550" cy="104" r="8" fill="#fff" stroke="#8A93A0" stroke-width="2.2"/>';
+  s += txt('', 562, 94, '핵공', 12.5, '#5A6270', 'start', 600);
+  s += '<path d="M556,112 q26,36 50,64" fill="none" stroke="' + C_RNA + '" stroke-width="4" stroke-linecap="round" stroke-dasharray="9,6"/>';
+  s += wave(560, 202, 96, C_RNA, '');
+  s += txt('', 674, 240, '세포질 — 핵공을 나온 mRNA', 13, C_RNA_INK, 'end', 700);
+  /* 고른 자리에만 라이보솜 — 처음에는 하나도 없다(답이 미리 보이지 않게 · 2026-10-14 교사) */
+  s += placedRibo('pro') + placedRibo('euk');
   return s;
+}
+function cellAskHtml(){
+  var h = '';
+  ['pro', 'euk'].forEach(function(side){
+    var p = state.cellPick[side];
+    h += '<div class="cellask"><div class="cq">' + CELL_Q[side] + '</div>';
+    CELL_SPOT[side].forEach(function(sp){
+      var c = 'choice';
+      if (p) c += (sp.n === p) ? (sp.n === CELL_ANS[side] ? ' right' : ' picked') : ' dim';
+      h += '<button type="button" class="' + c + '" onclick="pickCell(&#39;' + side + '&#39;,' + sp.n + ')">' + sp.t + '</button>';
+    });
+    h += '</div>';
+  });
+  return h;
 }
 function cellVerdictHtml(){
   var h = '', done = 0;
@@ -1556,7 +1575,10 @@ function cellVerdictHtml(){
     h += '<div class="verdict ' + (right ? 'good' : 'bad') + '"><div class="vh">' +
          (right ? '✅ ' : '❌ ') + nm + '</div><div class="vb">' + body + '</div></div>';
   });
-  if (done === 0) h = '<span class="cnt">두 세포에서 ㉠ 또는 ㉡ 을 하나씩 찍으시오.</span>';
+  if (done === 0) h = '<span class="cnt">세포마다 단추를 하나씩 고르시오.</span>';
+  if (state.cellPick.pro === CELL_ANS.pro && state.cellPick.euk === CELL_ANS.euk)
+    h += '<div class="verdict good"><div class="vh">📌 정리</div><div class="vb">원핵세포 — 전사와 번역이 <b>한자리에서 동시에</b> 일어난다.<br>' +
+         '진핵세포 — 전사(<b>핵</b>) → mRNA 가 <b>핵공</b>을 지나 이동 → 번역(<b>세포질</b>).</div></div>';
   return h;
 }
 function pickCell(side, n){
@@ -1567,6 +1589,7 @@ function pickCell(side, n){
 }
 function renderCellCard(){
   setHTML('clStage', clStageSvg());
+  setHTML('cellAsk', cellAskHtml());
   setHTML('cellVerdict', cellVerdictHtml());
 }
 
@@ -1663,7 +1686,10 @@ var Q_CELL = [
 ];
 var PRACTICE = [
   { id:'p1', lv:'중',
-    q:'프로모터가 이 유전자의 <b>반대쪽 끝</b>에 있다면 어느 가닥이 주형이 되는가?',
+    dat:['위 가닥 <span class="seq">3′-ACCTACAACCGTCAT-5′</span>',
+         '아래 가닥 <span class="seq">5′-TGGATGTTGGCAGTA-3′</span>',
+         '프로모터는 <b>왼쪽 끝</b>에 있고, 지금은 <b>위 가닥</b>이 주형이다(② 의 유전자)'],
+    q:'위의 유전자에서 프로모터가 <b>반대쪽 끝(오른쪽)</b>에 있다면 어느 가닥이 주형이 되는가?',
     ch:['지금과 같은 가닥이 주형이 된다.',
         '두 가닥이 모두 주형이 된다.',
         '어느 가닥도 주형이 되지 못한다.',
@@ -1701,7 +1727,7 @@ var PRACTICE = [
           '주형 가닥과 RNA 는 방향이 서로 반대이다. RNA 의 5′ 끝과 마주 보는 주형의 끝은 3′ 이다.'] },
 
   { id:'p4', lv:'상',
-    q:'아래 DNA 에서 전사되는 RNA 의 <b>처음 세 염기</b>는 무엇인가?',
+    q:'위의 DNA 에서 전사되는 RNA 의 <b>처음 세 염기</b>는 무엇인가?',
     dat:['위 가닥 <span class="seq">5′-TACGGATC-3′</span>',
          '아래 가닥 <span class="seq">3′-ATGCCTAG-5′</span>',
          '프로모터는 <b>오른쪽 끝</b>에 있다'],
@@ -1785,18 +1811,18 @@ function renderQuizInto(list, boxId, colorCls){
     var card = document.createElement('div');
     card.className = 'pq-card';
 
-    var q = document.createElement('div');
-    q.className = 'qtext';
-    q.innerHTML = '<span class="qno' + (colorCls ? ' ' + colorCls : '') + '">' + (idx + 1) + '</span>' +
-                  (p.lv ? '<span class="lv">' + p.lv + '</span>' : '') + p.q;
-    card.appendChild(q);
-
-    if (p.dat){
+    if (p.dat){   /* ★자료는 발문 위에 — 문항이 쓰는 자료는 문항 위에 둔다(2026-10-14 교사) */
       var dat = document.createElement('div');
       dat.className = 'datbox';
       dat.innerHTML = '<b>[자료]</b><ul><li>' + p.dat.join('</li><li>') + '</li></ul>';
       card.appendChild(dat);
     }
+
+    var q = document.createElement('div');
+    q.className = 'qtext';
+    q.innerHTML = '<span class="qno' + (colorCls ? ' ' + colorCls : '') + '">' + (idx + 1) + '</span>' +
+                  (p.lv ? '<span class="lv">' + p.lv + '</span>' : '') + p.q;
+    card.appendChild(q);
 
     var wrap = document.createElement('div');
     wrap.className = 'choices';

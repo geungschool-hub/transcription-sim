@@ -2237,9 +2237,15 @@ if (typeof window !== 'undefined' && window.addEventListener) window.addEventLis
       }, function(){ return 'unknown'; });
     } catch (e) { return Promise.resolve('unknown'); }
   }
-  function send(){
+  /* m = 이 접속의 상태(로그인 블록이 window.__hubMode 에 적는다) — in 로그인 · anon 익명 선택 · fb 비상구 · te 교사 기기 · na 로그인 화면에서 정하지 않고 나감.
+     ★로그인 화면이 떠 있는 동안은 정해질 때까지(최대 MODE_WAIT) 기다렸다 보낸다. 그 전에 창을 닫으면 na 로 보낸다(망 판정 없이). */
+  var MODE_WAIT = 90000, sent = false;
+  function modeNow(){ var m = window.__hubMode; return /^(in|anon|fb|te)$/.test(m || '') ? m : 'na'; }
+  function send(m, quick){
+    if (sent) return;
     try {
       if (location.protocol !== 'https:' || location.hostname !== HOST) return;
+      sent = true;
       if (!window.fetch || !window.crypto || !crypto.getRandomValues) return;
       var ls = null;
       try { ls = window.localStorage; } catch (e) {}
@@ -2254,18 +2260,27 @@ if (typeof window !== 'undefined' && window.addEventListener) window.addEventLis
       }
       var t = false;
       try { t = !!ls && ls.getItem('hubstats_teacher') === '1'; } catch (e) {}
-      network().then(function(n){
+      (quick ? Promise.resolve('unknown') : network()).then(function(n){
         return fetch(DB + '/visits.json', {
           method: 'POST', keepalive: true,
           headers: { 'Content-Type': 'text/plain' },
-          body: JSON.stringify({ a: APP, ts: { '.sv': 'timestamp' }, d: d, t: t, n: n })
+          body: JSON.stringify({ a: APP, ts: { '.sv': 'timestamp' }, d: d, t: t, n: n, m: m })
         });
       }).catch(function(){});
     } catch (e) {}
   }
+  function whenDecided(){
+    var t0 = Date.now();
+    (function poll(){
+      if (sent) return;
+      if (window.__hubMode || Date.now() - t0 >= MODE_WAIT) return send(modeNow());
+      setTimeout(poll, 500);
+    })();
+  }
   try {
-    if (document.readyState === 'complete') setTimeout(send, 1000);
-    else window.addEventListener('load', function(){ setTimeout(send, 1000); });
+    if (document.readyState === 'complete') setTimeout(whenDecided, 1000);
+    else window.addEventListener('load', function(){ setTimeout(whenDecided, 1000); });
+    window.addEventListener('pagehide', function(){ if (!sent) send(modeNow(), true); });
   } catch (e) {}
 })();
 </script>
@@ -2279,7 +2294,7 @@ if (typeof window !== 'undefined' && window.addEventListener) window.addEventLis
      ★기록하는 것은 「들어감 · 머문 시간 · 다시 하기」뿐이다. 정답·힌트는 기록하지 않는다(작업노트/방법_활동기록_어디에남길것인가.md).
      ★이름 전체는 기기에 남기지 않는다(학번 + 성 첫 글자만). 기록 칸(track)에는 이름·학번이 없다(uid 만). */
   var APP = 'transcription-sim';
-  var VER = 2;   /* 2: 익명 선택 기기에 남김 · PIN 분실 안내 · 카드 고정 키(data-hub-card) */
+  var VER = 3;   /* 2: 익명 선택 기기에 남김 · PIN 분실 안내 · 카드 고정 키(data-hub-card) · 3: 접속 기록에 로그인 상태 m(__hubMode) */
   var KEY = 'AIzaSyDNsHgzaruofl82oqrEb7GGkJhv8M04_YY';
   var DB = 'https://geung-hub-stats-default-rtdb.asia-southeast1.firebasedatabase.app';
   var IDT = 'https://identitytoolkit.googleapis.com/v1/accounts:';
@@ -2500,7 +2515,7 @@ if (typeof window !== 'undefined' && window.addEventListener) window.addEventLis
       '<div class="hubl-msg" id="hubl-msg"></div></form>';
     D.body.appendChild(ov);
     D.getElementById('hubl-form').onsubmit = function(ev){ ev.preventDefault(); login(); };
-    D.getElementById('hubl-skip').onclick = function(){ lsSet(LS_ANON, String(now() + ANON_MS)); closeGate(); anonBadge(); };
+    D.getElementById('hubl-skip').onclick = function(){ lsSet(LS_ANON, String(now() + ANON_MS)); W.__hubMode = 'anon'; closeGate(); anonBadge(); };
     reach();
   }
   function closeGate(){ if (ov && ov.parentNode) ov.parentNode.removeChild(ov); ov = null; }
@@ -2508,7 +2523,7 @@ if (typeof window !== 'undefined' && window.addEventListener) window.addEventLis
   function val(id){ var e = D.getElementById(id); return e ? String(e.value || '').trim() : ''; }
   function fallback(){
     if (!ov) return;
-    ssSet(SS_FB, String(now() + 10 * 60000));
+    ssSet(SS_FB, String(now() + 10 * 60000)); W.__hubMode = 'fb';
     closeGate();
     toast('로그인 서버에 연결되지 않아 기록 없이 진행한다.', 4000);
   }
@@ -2532,7 +2547,7 @@ if (typeof window !== 'undefined' && window.addEventListener) window.addEventLis
     var go = D.getElementById('hubl-go'); if (go) go.disabled = true;
     msg('확인하고 있다…', 'info');
     doLogin(f).then(function(){
-      closeGate(); badge(); toast(me.tag + ' 으로 기록한다.'); startTrack();
+      W.__hubMode = 'in'; closeGate(); badge(); toast(me.tag + ' 으로 기록한다.'); startTrack();
     }, function(e){
       if (e && e.timeout){ fallback(); return; }
       msg(typeof e === 'string' ? e : '로그인하지 못했다. 다시 시도하시오.', /^처음 로그인/.test(e) ? 'info' : 'bad');   /* 처음 로그인 안내는 오류가 아니다 */
@@ -2717,16 +2732,16 @@ if (typeof window !== 'undefined' && window.addEventListener) window.addEventLis
   /* ── 시작 ── */
   function boot(){
     try {
-      if (lsGet('hubstats_teacher') === '1') return;                         /* 교사 기기 — 묻지 않고 기록하지 않는다 */
+      if (lsGet('hubstats_teacher') === '1'){ W.__hubMode = 'te'; return; }                       /* 교사 기기 — 묻지 않고 기록하지 않는다 */
       try { me = JSON.parse(lsGet(LS_AUTH) || 'null'); } catch (e) { me = null; }
       if (me && me.uid && me.refreshToken && me.tag){
         badge(); toast(me.tag + ' 으로 기록한다.');
-        startTrack();                                                         /* 서버를 기다리지 않는다 — 토큰은 보낼 때 갱신 */
+        W.__hubMode = 'in'; startTrack();                                     /* 서버를 기다리지 않는다 — 토큰은 보낼 때 갱신 */
         return;
       }
       me = null;
-      if (Number(lsGet(LS_ANON) || 0) > now()){ anonBadge(); return; }
-      if (Number(ssGet(SS_FB) || 0) > now()) return;
+      if (Number(lsGet(LS_ANON) || 0) > now()){ W.__hubMode = 'anon'; anonBadge(); return; }
+      if (Number(ssGet(SS_FB) || 0) > now()){ W.__hubMode = 'fb'; return; }
       showGate();
     } catch (e) {}
   }

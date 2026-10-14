@@ -2269,6 +2269,458 @@ if (typeof window !== 'undefined' && window.addEventListener) window.addEventLis
   } catch (e) {}
 })();
 </script>
+<script>
+(function(){
+  'use strict';
+  /* ── 과학허브 학생 로그인 + 카드 기록 (2026-10-13) ─────────────────────────
+     ★Firebase SDK 를 쓰지 않는다 — REST 만(identitytoolkit · securetoken · RTDB). 활동마다 SDK 를 싣지 않고,
+       다른 활동의 기본 앱(염기 변이 등)과 부딪히지 않으며, pagehide 에서 keepalive 로 보낼 수 있다.
+     ★RTDB 쓰기는 POST + x-http-method-override + text/plain — 단순 요청이라 preflight 가 없고 keepalive 가 듣는다.
+     ★기록하는 것은 「들어감 · 머문 시간 · 다시 하기」뿐이다. 정답·힌트는 기록하지 않는다(작업노트/방법_활동기록_어디에남길것인가.md).
+     ★이름 전체는 기기에 남기지 않는다(학번 + 성 첫 글자만). 기록 칸(track)에는 이름·학번이 없다(uid 만). */
+  var APP = 'transcription-sim';
+  var VER = 1;
+  var KEY = 'AIzaSyDNsHgzaruofl82oqrEb7GGkJhv8M04_YY';
+  var DB = 'https://geung-hub-stats-default-rtdb.asia-southeast1.firebasedatabase.app';
+  var IDT = 'https://identitytoolkit.googleapis.com/v1/accounts:';
+  var STS = 'https://securetoken.googleapis.com/v1/token?key=' + KEY;
+  var HOST = 'geungschool-hub.github.io';
+  var SCHOOLS = [{ v: 'hyehwa26', t: '혜화여자고등학교' }];   /* 값에 학년도 — 학번은 해마다 다른 학생에게 간다 */
+  var PW_SUFFIX = '#gh26';
+  var LS_AUTH = 'hubauth_v1', SS_FB = 'hubgate_fb', SS_SKIP = 'hubgate_skip';
+  var T_STEP = 10000, T_FALLBACK = 10000, ENTER_MS = 5000, IDLE_MS = 60000, FLUSH_MS = 60000;
+  /* 개인정보 수집·이용 동의 — 처음 로그인(PIN 을 정할 때)에만 받는다. 동의 시각은 users/{uid}/ag(서버 시각)에 남는다.
+     ★「오직 수업 및 학습자료 개선 목적으로만 사용되며」는 교사 지정 문구(2026-10-14) — 빼지 말 것 */
+  var CONSENT = '<b>개인정보 수집·이용 동의</b>' +
+    '<ul><li>수집 항목: 학번·이름(본인 확인), 활동별 접속 횟수·카드별 머문 시간·다시 하기 횟수</li>' +
+    '<li>이용 목적: 수집한 정보는 <b>오직 수업 및 학습자료 개선 목적으로만 사용되며</b>, 여기서 수업 목적에는 활동 참여 기록을 학기말 학교생활기록부 작성의 근거로 쓰는 것이 포함된다.</li>' +
+    '<li>보유 기간: 학교생활기록부의 근거 자료로 쓰일 수 있으므로 졸업 후 1년까지 보관하고, 그 뒤 삭제한다.</li>' +
+    '<li>동의하지 않을 수 있다. 동의하지 않으면 「익명으로 이용」을 누른다. 익명으로도 모든 활동을 똑같이 이용할 수 있고, 학생 기록은 남지 않는다.</li></ul>';
+
+  /* ▼ 순수 — 검사가 떼어 쓴다 */
+  function normName(s){ return String(s == null ? '' : s).replace(/\s+/g, ''); }
+  function emailOf(sc, id, rc){ return sc + '-' + id + '-r' + (Number(rc) || 0) + '@stu.hubstats.local'; }
+  function tagOf(id, name){ var n = normName(name); return id + ' ' + (n ? n.charAt(0) + '○' : ''); }
+  function checkInput(f){
+    if (!f.sc) return '학교를 고르시오.';
+    if (!/^\d{5}$/.test(f.id || '')) return '학번은 숫자 5자리로 입력하시오.';
+    if (!normName(f.name)) return '이름을 입력하시오.';
+    if (!/^\d{4}$/.test(f.pin || '')) return 'PIN 은 숫자 4자리로 입력하시오.';
+    return '';
+  }
+  function cardKey(el, idx){
+    var k = el && el.getAttribute && (el.getAttribute('data-hub-card') || el.getAttribute('id'));
+    k = String(k || '').replace(/[^A-Za-z0-9_-]/g, '').slice(0, 40);
+    return k || ('c' + idx);
+  }
+  function newSid(now, rnd){
+    var abc = 'abcdefghijklmnopqrstuvwxyz0123456789', s = '';
+    for (var i = 0; i < 4; i++) s += abc[Math.floor(rnd() * 36) % 36];
+    return Number(now).toString(36) + s;
+  }
+  /* 화면을 가장 많이 차지한 카드 — 화면의 35% 이상 또는 카드 자신의 60% 이상 보여야 한다 */
+  function pickActive(rects, vh){
+    var best = -1, bestScore = 0;
+    for (var i = 0; i < rects.length; i++){
+      var r = rects[i], h = Math.max(0, r.bottom - r.top);
+      var vis = Math.max(0, Math.min(r.bottom, vh) - Math.max(r.top, 0));
+      if (!h || !vis) continue;
+      var shareV = vis / vh, shareC = vis / h;
+      if (shareV < 0.35 && shareC < 0.6) continue;
+      if (shareV > bestScore){ bestScore = shareV; best = i; }
+    }
+    return best;
+  }
+  function trackValueOk(card, key, v){
+    if (!/^[A-Za-z0-9_-]{1,40}$/.test(String(card))) return false;
+    if (typeof key !== 'string' || !key || key.length > 40) return false;
+    if (typeof v === 'string') return v.length <= 200;
+    if (typeof v === 'number') return isFinite(v);
+    return typeof v === 'boolean';
+  }
+  /* ▲ 순수 */
+
+  var W = window, D = document;
+  var demo = false, mode = 'off';   /* off(기록 안 함) · live */
+  var me = null;                    /* {sc,id,uid,idToken,refreshToken,exp,tag} */
+  try {
+    var onHost = location.protocol === 'https:' && location.hostname === HOST;
+    demo = !onHost && /(^|[?&])hubdemo(&|$)/.test(location.search.slice(1)) &&
+           /^(localhost|127\.0\.0\.1)$/.test(location.hostname);
+    if (!onHost && !demo){ W.hubTrack = function(){}; return; }
+  } catch (e) { return; }
+
+  function lsGet(k){ try { return W.localStorage.getItem(k); } catch (e) { return null; } }
+  function lsSet(k, v){ try { if (v == null) W.localStorage.removeItem(k); else W.localStorage.setItem(k, v); } catch (e) {} }
+  function ssGet(k){ try { return W.sessionStorage.getItem(k); } catch (e) { return null; } }
+  function ssSet(k, v){ try { if (v == null) W.sessionStorage.removeItem(k); else W.sessionStorage.setItem(k, v); } catch (e) {} }
+  function now(){ return Date.now(); }
+
+  /* ── 통신 ── */
+  var demoStore = { db: {}, users: {} };
+  function demoFetch(url, init){
+    /* 로컬 실측용 가짜 서버 — 명단에 99900(테스트)만 있다. 규칙은 이름 대조만 흉내 낸다 */
+    var body = init && init.body ? (function(){ try { return JSON.parse(init.body); } catch (e) { return {}; } })() : null;
+    function res(code, obj){ return Promise.resolve({ ok: code < 300, status: code, text: function(){ return Promise.resolve(JSON.stringify(obj)); } }); }
+    var db = demoStore.db;
+    if (!db.st){ db.st = { hyehwa26: { '99900': { rc: 0, on: false } } }; db.roster = { hyehwa26: { '99900': { name: '테스트' } } }; db.claim = {}; }
+    if (url.indexOf(IDT) === 0){
+      var op = url.slice(IDT.length).split('?')[0], u = demoStore.users[body.email];
+      if (op === 'signUp'){ if (u) return res(400, { error: { message: 'EMAIL_EXISTS' } });
+        u = demoStore.users[body.email] = { pw: body.password, uid: 'demo' + Object.keys(demoStore.users).length }; }
+      else if (op === 'signInWithPassword'){ if (!u || u.pw !== body.password) return res(400, { error: { message: 'INVALID_LOGIN_CREDENTIALS' } }); }
+      else if (op === 'delete') return res(200, {});
+      return res(200, { idToken: 'tok-' + u.uid, refreshToken: 'ref-' + u.uid, localId: u.uid, expiresIn: '3600' });
+    }
+    if (url.indexOf(STS) === 0) return res(200, { id_token: 'tok2', refresh_token: 'ref2', expires_in: '3600' });
+    var m = url.slice(DB.length + 1).split('.json')[0].split('/'), meth = (/x-http-method-override=(\w+)/.exec(url) || [0, init && init.method || 'GET'])[1];
+    if (m[0] === 'st' && meth === 'GET'){ var s = db.st[m[1]]; return res(200, s && m[2] ? (s[m[2]] || null) : null); }
+    if (m[0] === 'schools' && m[2] === 'claim'){
+      if (meth === 'GET') return res(200, db.claim[m[3]] || null);
+      var ro = db.roster[m[1]][m[3]];
+      if (db.claim[m[3]] || !ro || ro.name !== body.name) return res(401, { error: 'Permission denied' });
+      db.claim[m[3]] = body; return res(200, body);
+    }
+    if (m[0] === 'st' && m[3] === 'on'){ db.st[m[1]][m[2]].on = true; return res(200, true); }
+    if (W.console) console.log('[hubdemo]', meth, m.join('/'), body);
+    return res(200, body || null);
+  }
+  function rawFetch(url, init){ return demo ? demoFetch(url, init) : W.fetch(url, init); }
+  function timeout(p, ms){
+    return new Promise(function(ok, no){
+      var t = setTimeout(function(){ no({ timeout: true }); }, ms);
+      p.then(function(v){ clearTimeout(t); ok(v); }, function(e){ clearTimeout(t); no(e); });
+    });
+  }
+  /* 결과는 늘 {ok, status, data} — 네트워크가 끊기면 status 0, 시간이 지나면 {timeout:true} 를 던진다 */
+  function call(url, init, ms){
+    return timeout(Promise.resolve().then(function(){ return rawFetch(url, init); }).then(function(r){
+      return r.text().then(function(t){ var d = null; try { d = JSON.parse(t); } catch (e) {} return { ok: r.ok, status: r.status, data: d }; });
+    }, function(){ return { ok: false, status: 0, data: null }; }), ms || T_STEP);
+  }
+  function idt(op, body){
+    return call(IDT + op + '?key=' + KEY, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  }
+  function errMsg(r){ return (r && r.data && r.data.error && (r.data.error.message || r.data.error)) || ''; }
+  function dbUrl(path, meth, tok){
+    var q = [];
+    if (tok) q.push('auth=' + encodeURIComponent(tok));
+    if (meth && meth !== 'GET' && meth !== 'POST') q.push('x-http-method-override=' + meth);
+    return DB + '/' + path + '.json' + (q.length ? '?' + q.join('&') : '');
+  }
+  function dbCall(meth, path, body, tok, keep){
+    var init = meth === 'GET' ? { cache: 'no-store' }
+             : { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: JSON.stringify(body), keepalive: !!keep };
+    return call(dbUrl(path, meth, tok), init);
+  }
+  function saveMe(){ lsSet(LS_AUTH, me ? JSON.stringify(me) : null); }
+  function setToken(d){
+    me.idToken = d.idToken || d.id_token; me.refreshToken = d.refreshToken || d.refresh_token || me.refreshToken;
+    me.exp = now() + (Number(d.expiresIn || d.expires_in) || 3600) * 1000;
+  }
+  function freshToken(){
+    if (!me) return Promise.reject('no');
+    if (me.exp - now() > 5 * 60000) return Promise.resolve(me.idToken);
+    return call(STS, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: 'grant_type=refresh_token&refresh_token=' + encodeURIComponent(me.refreshToken) }).then(function(r){
+      if (r.ok && r.data && r.data.id_token){ setToken(r.data); saveMe(); return me.idToken; }
+      if (r.status >= 400 && r.status < 500){ me = null; saveMe(); }   /* 계정이 사라졌거나 토큰이 무효 — 다음에 다시 로그인 */
+      throw 'refresh';
+    });
+  }
+
+  /* ── 화면 ── */
+  var CSS = '.hubl-ov{position:fixed;inset:0;z-index:2147483000;background:rgba(244,246,249,.97);display:flex;align-items:flex-start;justify-content:center;padding:16px;overflow:auto;font-family:"Malgun Gothic","Apple SD Gothic Neo",sans-serif;color:#1A1A1A;}' +
+    '.hubl-box{background:#fff;border:1px solid #D5D8DE;border-radius:16px;box-shadow:0 8px 30px rgba(0,0,0,.08);padding:22px 20px;width:100%;max-width:400px;margin:auto;}' +
+    '.hubl-box h2{margin:0 0 4px;font-size:21px;color:#1255A0;border:0;background:none;padding:0;}' +
+    '.hubl-box p.hubl-sub{margin:0 0 14px;font-size:14.5px;color:#555;line-height:1.55;}' +
+    '.hubl-box label{display:block;font-size:15px;font-weight:700;margin:10px 0 4px;}' +
+    '.hubl-box input,.hubl-box select{box-sizing:border-box;width:100%;font:inherit;font-size:18px;min-height:46px;padding:8px 12px;border:1.5px solid #C8CDD4;border-radius:10px;background:#fff;color:#1A1A1A;}' +
+    '.hubl-box input:focus,.hubl-box select:focus{outline:none;border-color:#1255A0;}' +
+    '.hubl-go{display:block;width:100%;margin-top:16px;font:inherit;font-size:18px;font-weight:800;min-height:50px;border-radius:10px;border:0;background:#1255A0;color:#fff;cursor:pointer;}' +
+    '.hubl-go:disabled{opacity:.55;}' +
+    '.hubl-btns{display:flex;gap:8px;margin-top:16px;}.hubl-btns .hubl-go{flex:1.4;margin:0;}' +
+    '.hubl-skip{flex:1;font:inherit;font-size:16px;font-weight:700;min-height:50px;padding:6px 10px;border-radius:10px;border:1.5px solid #C8CDD4;background:#fff;color:#444;cursor:pointer;}' +
+    '.hubl-consent{margin-top:12px;border:1.5px solid #C5D7EC;background:#F5F9FD;border-radius:10px;padding:10px 12px;font-size:15px;line-height:1.55;}' +
+    '.hubl-consent ul{margin:6px 0 8px;padding-left:18px;}.hubl-consent li{margin:3px 0;}' +
+    '.hubl-box label.hubl-agree{display:flex;align-items:center;gap:8px;margin:0;font-size:16px;min-height:44px;cursor:pointer;}' +
+    '.hubl-box label.hubl-agree input{width:24px;height:24px;min-height:0;flex:none;margin:0;}' +
+    '.hubl-msg{min-height:22px;margin-top:10px;font-size:15px;line-height:1.5;}.hubl-msg.bad{color:#C0392B;}.hubl-msg.info{color:#1255A0;}' +
+    '.hubl-badge{position:fixed;left:10px;bottom:10px;z-index:2147482000;display:flex;align-items:center;gap:6px;background:rgba(255,255,255,.95);border:1px solid #D5D8DE;border-radius:999px;padding:4px 6px 4px 12px;font:14px "Malgun Gothic","Apple SD Gothic Neo",sans-serif;color:#333;box-shadow:0 2px 8px rgba(0,0,0,.06);}' +
+    '.hubl-badge button{font:inherit;font-size:13.5px;min-height:36px;padding:4px 10px;border-radius:999px;border:1px solid #C8CDD4;background:#fff;color:#1255A0;cursor:pointer;}' +
+    '.hubl-toast{position:fixed;left:50%;top:14px;transform:translateX(-50%);z-index:2147482001;background:#1A1A1A;color:#fff;border-radius:10px;padding:10px 16px;font:15px "Malgun Gothic","Apple SD Gothic Neo",sans-serif;box-shadow:0 4px 14px rgba(0,0,0,.2);transition:opacity .4s;max-width:90vw;}';
+  function el(tag, cls, html){ var e = D.createElement(tag); if (cls) e.className = cls; if (html != null) e.innerHTML = html; return e; }
+  function css(){ if (D.getElementById('hubl-css')) return; var s = el('style'); s.id = 'hubl-css'; s.textContent = CSS; (D.head || D.documentElement).appendChild(s); }
+  function toast(t, ms){
+    css();
+    var e = el('div', 'hubl-toast'); e.textContent = t; D.body.appendChild(e);
+    setTimeout(function(){ e.style.opacity = '0'; setTimeout(function(){ if (e.parentNode) e.parentNode.removeChild(e); }, 500); }, ms || 3000);
+  }
+  function badge(){
+    css();
+    var old = D.getElementById('hubl-badge'); if (old) old.parentNode.removeChild(old);
+    var b = el('div', 'hubl-badge'); b.id = 'hubl-badge';
+    var s = el('span'); s.textContent = '👤 ' + me.tag; b.appendChild(s);
+    var btn = el('button'); btn.type = 'button'; btn.textContent = '다른 사람으로 로그인'; btn.onclick = switchUser; b.appendChild(btn);
+    D.body.appendChild(b);
+  }
+  function switchUser(){
+    flush(true);
+    me = null; saveMe();
+    try { location.reload(); } catch (e) {}
+  }
+
+  var ov = null, fails = 0, lockUntil = 0, needConfirm = false;
+  function showGate(){
+    css();
+    ov = el('div', 'hubl-ov'); ov.id = 'hubl-ov';
+    var opts = SCHOOLS.map(function(s){ return '<option value="' + s.v + '">' + s.t + '</option>'; }).join('');
+    ov.innerHTML = '<form class="hubl-box" id="hubl-form" autocomplete="off">' +
+      '<h2>🔐 과학허브 로그인</h2><p class="hubl-sub">학교·학번·이름·PIN 을 입력하시오. 처음이면 사용할 PIN 을 정한다. 기록을 남기지 않으려면 「익명으로 이용」을 누르시오.</p>' +
+      '<label for="hubl-sc">학교</label><select id="hubl-sc">' + opts + '</select>' +
+      '<label for="hubl-id">학번</label><input id="hubl-id" inputmode="numeric" maxlength="5" placeholder="예: 20700">' +
+      '<label for="hubl-name">이름</label><input id="hubl-name" maxlength="20">' +
+      '<label for="hubl-pin">PIN (숫자 4자리)</label><input id="hubl-pin" type="password" inputmode="numeric" maxlength="4">' +
+      '<div id="hubl-pin2w" style="display:none"><label for="hubl-pin2">PIN 한 번 더</label><input id="hubl-pin2" type="password" inputmode="numeric" maxlength="4"></div>' +
+      '<div id="hubl-agreew" class="hubl-consent" style="display:none">' + CONSENT +
+        '<label class="hubl-agree" for="hubl-agree"><input id="hubl-agree" type="checkbox"> 위 내용을 읽고 동의한다.</label></div>' +
+      '<div class="hubl-btns"><button class="hubl-go" id="hubl-go" type="submit">로그인</button>' +
+      '<button class="hubl-skip" id="hubl-skip" type="button">익명으로 이용</button></div>' +
+      '<div class="hubl-msg" id="hubl-msg"></div></form>';
+    D.body.appendChild(ov);
+    D.getElementById('hubl-form').onsubmit = function(ev){ ev.preventDefault(); login(); };
+    D.getElementById('hubl-skip').onclick = function(){ ssSet(SS_SKIP, '1'); closeGate(); };
+    reach();
+  }
+  function closeGate(){ if (ov && ov.parentNode) ov.parentNode.removeChild(ov); ov = null; }
+  function msg(t, cls){ var m = D.getElementById('hubl-msg'); if (m){ m.className = 'hubl-msg ' + (cls || 'bad'); m.textContent = t; } }
+  function val(id){ var e = D.getElementById(id); return e ? String(e.value || '').trim() : ''; }
+  function fallback(){
+    if (!ov) return;
+    ssSet(SS_FB, String(now() + 10 * 60000));
+    closeGate();
+    toast('로그인 서버에 연결되지 않아 기록 없이 진행한다.', 4000);
+  }
+  /* 비상구 — 서버 둘 중 하나라도 10초 안에 답하면 기다린다 */
+  function reach(){
+    var answered = false;
+    function okk(r){ if (r && r.status) answered = true; }
+    call(dbUrl('st/' + SCHOOLS[0].v + '/_'), { cache: 'no-store' }, T_FALLBACK).then(okk, function(){});
+    idt('signInWithPassword', {}).then(okk, function(){});
+    setTimeout(function(){ if (!answered) fallback(); }, T_FALLBACK);
+  }
+
+  var busy = false;
+  function login(){
+    if (busy) return;
+    if (now() < lockUntil){ msg('잠시 뒤 다시 시도하시오. (' + Math.ceil((lockUntil - now()) / 1000) + '초)'); return; }
+    var f = { sc: val('hubl-sc'), id: val('hubl-id'), name: normName(val('hubl-name')), pin: val('hubl-pin') };
+    var bad = checkInput(f);
+    if (bad){ msg(bad); return; }
+    busy = true;
+    var go = D.getElementById('hubl-go'); if (go) go.disabled = true;
+    msg('확인하고 있다…', 'info');
+    doLogin(f).then(function(){
+      closeGate(); badge(); toast(me.tag + ' 으로 기록한다.'); startTrack();
+    }, function(e){
+      if (e && e.timeout){ fallback(); return; }
+      msg(typeof e === 'string' ? e : '로그인하지 못했다. 다시 시도하시오.', /^처음 로그인/.test(e) ? 'info' : 'bad');   /* 처음 로그인 안내는 오류가 아니다 */
+    }).then(function(){ busy = false; if (go) go.disabled = false; });
+  }
+  function wrongPin(){
+    fails++;
+    if (fails >= 5){ fails = 0; lockUntil = now() + 60000; return 'PIN 이 5번 틀렸다. 60초 뒤 다시 시도하시오.'; }
+    return 'PIN 이 옳지 않다. (' + fails + '/5)';
+  }
+  function authFail(r){
+    var m = errMsg(r);
+    if (/TOO_MANY_ATTEMPTS/.test(m)){ lockUntil = now() + 90000; return '시도가 너무 많다. 90초 뒤 다시 시도하시오.'; }
+    if (/INVALID_LOGIN_CREDENTIALS|INVALID_PASSWORD|EMAIL_NOT_FOUND/.test(m)) return wrongPin();
+    if (!r.status) return '인터넷 연결이 불안정하다. 다시 시도하시오.';
+    return '로그인하지 못했다. (' + m + ')';
+  }
+  function doLogin(f){
+    var st, created = false, uid, tok, email;
+    var CL = 'schools/' + f.sc + '/claim/' + f.id;
+    return dbCall('GET', 'st/' + f.sc + '/' + f.id).then(function(r){
+      if (!r.ok) throw '인터넷 연결이 불안정하다. 다시 시도하시오.';
+      st = r.data;
+      if (!st) throw '명단에 없는 학번이다. 학번을 확인하거나 선생님께 문의하시오.';
+      email = emailOf(f.sc, f.id, st.rc);
+      if (st.on) return idt('signInWithPassword', { email: email, password: f.pin + PW_SUFFIX, returnSecureToken: true });
+      /* 처음 — PIN 을 한 번 더 받는다 */
+      var w = D.getElementById('hubl-pin2w'), aw = D.getElementById('hubl-agreew'), ag = D.getElementById('hubl-agree');
+      if (!needConfirm){ needConfirm = true; if (w) w.style.display = ''; if (aw) aw.style.display = ''; throw '처음 로그인이다. 정할 PIN 을 한 번 더 입력하고 아래 동의 내용을 읽으시오.'; }
+      if (val('hubl-pin2') !== f.pin) throw 'PIN 확인이 다르다. 다시 입력하시오.';
+      if (!ag || !ag.checked) throw '개인정보 수집·이용에 동의해야 로그인할 수 있다. 동의하지 않으면 「익명으로 이용」을 누르시오.';
+      return idt('signUp', { email: email, password: f.pin + PW_SUFFIX, returnSecureToken: true }).then(function(r2){
+        if (r2.ok){ created = true; return r2; }
+        if (/EMAIL_EXISTS/.test(errMsg(r2)))   /* 지난번에 반쯤 등록된 학번 — 그때 정한 PIN 으로 로그인한다 */
+          return idt('signInWithPassword', { email: email, password: f.pin + PW_SUFFIX, returnSecureToken: true });
+        return r2;
+      });
+    }).then(function(r){
+      if (!r.ok) throw authFail(r);
+      fails = 0;
+      uid = r.data.localId; tok = r.data.idToken;
+      me = { sc: f.sc, id: f.id, uid: uid, tag: tagOf(f.id, f.name) }; setToken(r.data);
+      if (st.on){
+        return dbCall('GET', CL, null, tok).then(function(c){
+          if (!c.ok) throw '인터넷 연결이 불안정하다. 다시 시도하시오.';
+          if (!c.data || c.data.uid !== uid || c.data.name !== f.name) throw '이름이 명단과 다르다. 띄어쓰기 없이 입력하시오.';
+        });
+      }
+      return dbCall('PUT', CL, { uid: uid, name: f.name }, tok).then(function(c){
+        if (c.ok) return;
+        /* ★거부돼도 내 것이면 그대로 간다(지난번 반쯤 등록). 지우는 것은 방금 만든 새 계정뿐이다 — 염기 변이의 잠김 버그를 고친 자리 */
+        return dbCall('GET', CL, null, tok).then(function(g){
+          if (g.ok && g.data && g.data.uid === uid) return;
+          var e = '이름이 명단과 다르거나 이미 등록된 학번이다. 선생님께 문의하시오.';
+          if (created) return idt('delete', { idToken: tok }).then(function(){ throw e; }, function(){ throw e; });
+          throw e;
+        });
+      }).then(function(){
+        return dbCall('PUT', 'users/' + uid, { sc: f.sc, id: f.id, ag: { '.sv': 'timestamp' } }, tok);   /* ag = 동의 시각 */
+      }).then(function(u){
+        if (u.ok) return;
+        return dbCall('GET', 'users/' + uid, null, tok).then(function(g){
+          if (!(g.ok && g.data && g.data.id === f.id && g.data.sc === f.sc)) throw '등록을 마치지 못했다. 다시 시도하시오.';
+        });
+      }).then(function(){
+        return dbCall('PUT', 'st/' + f.sc + '/' + f.id + '/on', true, tok);
+      });
+    }).then(function(){
+      needConfirm = false; saveMe();
+    }, function(e){ me = null; throw e; });
+  }
+
+  /* ── 카드 기록 ── */
+  var sess = null, cards = [], dirty = false, started = false, actIdx = -1, actSince = 0, counted = false,
+      lastTick = 0, lastInput = 0, detailN = 0, pending = [];
+  function queueKey(){ return 'hubtrack_q_' + me.uid; }
+  function loadQ(){ try { var q = JSON.parse(lsGet(queueKey()) || '[]'); return Array.isArray(q) ? q : []; } catch (e) { return []; } }
+  function saveQ(q){
+    var cut = now() - 7 * 86400000;
+    q = q.filter(function(x){ return x && x.ts > cut; }).slice(-200);
+    lsSet(queueKey(), q.length ? JSON.stringify(q) : null);
+  }
+  function enqueue(item){
+    if (!me) return;
+    var q = loadQ();
+    if (item.m !== 'POST') q = q.filter(function(x){ return x.p !== item.p; });   /* 같은 세션은 마지막 것만 */
+    q.push(item); saveQ(q);
+  }
+  function send(item, keep){
+    return freshToken().then(function(tok){
+      return dbCall(item.m, item.p, item.b, tok, keep);
+    }).then(function(r){
+      if (!r.ok && !r.status) throw 'net';   /* 네트워크만 다시 보낸다 — 규칙이 거부한 것은 버린다 */
+      return r;
+    }).catch(function(){ enqueue(item); });
+  }
+  function replay(){
+    var q = loadQ(); if (!q.length) return;
+    lsSet(queueKey(), null);
+    q.forEach(function(x){ send(x); });
+  }
+  function scanCards(){
+    var list = D.querySelectorAll('.card');
+    cards = [];
+    for (var i = 0; i < list.length; i++){
+      var h = list[i].querySelector('h2, h3');
+      cards.push({ el: list[i], key: cardKey(list[i], i), l: h ? String(h.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 40) : '' });
+    }
+  }
+  function slot(key, l){
+    var c = sess.c[key];
+    if (!c){ c = sess.c[key] = { n: 0, r: 0, ms: 0, l: l || '' }; }
+    return c;
+  }
+  function tick(){
+    var t = now(), dt = Math.min(5000, Math.max(0, t - lastTick)); lastTick = t;
+    var visible = !D.visibilityState || D.visibilityState === 'visible';
+    var awake = visible && (t - lastInput) < IDLE_MS;
+    if (awake) sess.ms += dt;
+    if (!cards.length) return;
+    var vh = W.innerHeight || D.documentElement.clientHeight || 800;
+    var idx = visible ? pickActive(cards.map(function(c){ return c.el.getBoundingClientRect(); }), vh) : -1;
+    if (idx !== actIdx){ actIdx = idx; actSince = t; counted = false; }
+    if (idx < 0) return;
+    var c = slot(cards[idx].key, cards[idx].l);
+    if (awake){ c.ms += dt; dirty = true; }
+    if (!counted && t - actSince >= ENTER_MS){ counted = true; c.n++; dirty = true; }
+  }
+  function onClick(ev){
+    var e = ev.target;
+    while (e && e !== D && !(e.tagName && e.tagName.toUpperCase() === 'BUTTON')) e = e.parentNode;
+    if (!e || e === D) return;
+    var oc = String((e.getAttribute && e.getAttribute('onclick')) || '');
+    var inSec = false, p = e;
+    while (p && p !== D){ if (p.classList && p.classList.contains('secreset')) { inSec = true; break; } p = p.parentNode; }
+    if (!/reset/i.test(oc) && !inSec) return;
+    var card = e, key = '_all', l = '';
+    while (card && card !== D){ if (card.classList && card.classList.contains('card')) break; card = card.parentNode; }
+    if (card && card !== D){ for (var i = 0; i < cards.length; i++) if (cards[i].el === card){ key = cards[i].key; l = cards[i].l; } }
+    slot(key, l).r++; dirty = true;
+  }
+  function body(){
+    var b = { t1: { '.sv': 'timestamp' }, ms: Math.round(sess.ms), v: VER, c: {} };
+    Object.keys(sess.c).forEach(function(k){ var c = sess.c[k]; b.c[k] = { n: c.n, r: c.r, ms: Math.round(c.ms), l: c.l }; });
+    if (!started) b.t0 = { '.sv': 'timestamp' };
+    return b;
+  }
+  function flush(keep){
+    if (mode !== 'live' || !sess || !me) return;
+    if (started && !dirty) return;
+    var item = { m: 'PATCH', p: 'track/' + me.uid + '/' + APP + '/s/' + sess.sid, b: body(), ts: now() };
+    started = true; dirty = false;
+    send(item, keep);
+  }
+  function startTrack(){
+    if (!me) return;
+    mode = 'live';
+    sess = { sid: newSid(now(), Math.random), ms: 0, c: {} };
+    lastTick = lastInput = now();
+    scanCards();
+    ['pointerdown', 'keydown', 'scroll', 'touchstart', 'wheel'].forEach(function(k){
+      W.addEventListener(k, function(){ lastInput = now(); }, { passive: true, capture: true });
+    });
+    D.addEventListener('click', onClick, true);
+    D.addEventListener('visibilitychange', function(){ if (D.visibilityState === 'hidden') flush(true); });
+    W.addEventListener('pagehide', function(){ tick(); dirty = true; flush(true); });
+    setInterval(tick, 1000);
+    setInterval(function(){ flush(false); }, FLUSH_MS);
+    flush(false);
+    replay();
+    pending.splice(0).forEach(function(a){ W.hubTrack(a[0], a[1], a[2]); });
+  }
+  /* 상세 기록 통로 — 활동이 원하는 자리에서 부른다. 아직 어느 문항에도 붙이지 않았다 */
+  W.hubTrack = function(card, key, value){
+    if (mode !== 'live' && ov){ if (pending.length < 200) pending.push([card, key, value]); return; }   /* 로그인 화면이 떠 있는 동안 부른 것은 로그인 뒤에 보낸다 */
+    if (mode !== 'live' || !trackValueOk(card, key, value) || detailN >= 200) return;
+    detailN++;
+    send({ m: 'POST', p: 'track/' + me.uid + '/' + APP + '/d/' + card, b: { k: key, v: value, t: { '.sv': 'timestamp' } }, ts: now() });
+  };
+
+  /* ── 시작 ── */
+  function boot(){
+    try {
+      if (lsGet('hubstats_teacher') === '1') return;                         /* 교사 기기 — 묻지 않고 기록하지 않는다 */
+      try { me = JSON.parse(lsGet(LS_AUTH) || 'null'); } catch (e) { me = null; }
+      if (me && me.uid && me.refreshToken && me.tag){
+        badge(); toast(me.tag + ' 으로 기록한다.');
+        startTrack();                                                         /* 서버를 기다리지 않는다 — 토큰은 보낼 때 갱신 */
+        return;
+      }
+      me = null;
+      if (ssGet(SS_SKIP) === '1') return;
+      if (Number(ssGet(SS_FB) || 0) > now()) return;
+      showGate();
+    } catch (e) {}
+  }
+  if (D.readyState === 'loading') D.addEventListener('DOMContentLoaded', boot); else boot();
+})();
+</script>
 <!-- ▲ 접속 기록 -->
 </body>
 </html>

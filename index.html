@@ -381,47 +381,10 @@ html:not(.unlocked) #draftGate{display:flex;}
     <div class="rail" id="rail"></div>
   </div>
 
-  <!-- ══ ① 어느 가닥을 베끼는가 ══ -->
-  <div class="card split" id="cardStrand" data-hub-card="s1">
-    <h2 class="dna">① 어느 가닥을 베끼는가<span class="yr">교과서 61·63쪽</span></h2>
-    <div class="panes">
-      <div class="pane-l">
-        <div class="stage-wrap"><svg class="stage" id="stStage" viewBox="0 0 700 300" xmlns="http://www.w3.org/2000/svg" role="img"
-             aria-label="이중가닥 DNA 와 왼쪽 끝의 프로모터. 두 가닥 가운데 하나를 골라 만들어지는 RNA 의 처음 세 염기를 확인하는 무대"></svg></div>
-        <ul class="slg">
-          <li><span class="mk mk-prom"></span>프로모터 — RNA 중합효소가 결합하는 곳</li>
-          <li><span class="mk mk-dna"></span>DNA 두 가닥</li>
-          <li><span class="mk mk-rna"></span>새로 만들어지는 RNA</li>
-        </ul>
-      </div>
-      <div class="pane-r">
-        <div class="pr-do">
-          <div class="taskbar">두 가닥 가운데 <b>주형으로 쓰이는 가닥</b>을 고르시오.</div>
-          <div class="panel">
-            <div class="ptitle">🔎 판단의 근거</div>
-            <p>RNA 중합효소는 <b>프로모터</b>에 결합한 뒤 한쪽으로 나아가면서, 주형을 <b>3′ 쪽에서부터</b> 읽고 RNA 를 <b>5′ → 3′</b> 방향으로 잇는다.</p>
-            <ul>
-              <li>프로모터는 유전자의 <b>왼쪽 끝</b>에 있다 → 중합효소는 오른쪽으로 나아간다</li>
-              <li>그러므로 <b>왼쪽 끝이 3′ 인 가닥</b>이 주형이다</li>
-            </ul>
-          </div>
-          <div class="btnrow">
-            <button type="button" class="btn dna ghost" id="btnTop" onclick="pickStrand(1)">위 가닥을 주형으로</button>
-            <button type="button" class="btn dna ghost" id="btnBot" onclick="pickStrand(2)">아래 가닥을 주형으로</button>
-          </div>
-          <div id="strandVerdict"></div>
-          <div class="msg hide" id="fb_strand"></div>
-        </div>
-        <div class="pr-q"><div id="strandQ"></div></div>
-      </div>
-    </div>
-    <div class="secreset"><button type="button" onclick="resetSec('strand')">↻ ① 다시 하기</button></div>
-  </div>
-
-  <!-- ══ ② 개시 · 신장 · 종결 ══ -->
-  <div class="card split" id="cardStage" data-hub-card="s2">
+  <!-- ══ ① 개시 · 신장 · 종결 ══ -->
+  <div class="card split" id="cardStage" data-hub-card="s1">
     <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;">
-      <h2 class="pol" style="flex:1 1 300px;margin-bottom:0;">② 개시 · 신장 · 종결<span class="yr">교과서 63쪽 그림 Ⅱ-3</span></h2>
+      <h2 class="pol" style="flex:1 1 300px;margin-bottom:0;">① 개시 · 신장 · 종결<span class="yr">교과서 63쪽 그림 Ⅱ-3</span></h2>
       <span class="tag" id="stageProg">본 국면 1 / 9</span>
     </div>
     <div class="panes">
@@ -461,7 +424,44 @@ html:not(.unlocked) #draftGate{display:flex;}
         <div class="pr-q"><div id="stageQ"></div></div>
       </div>
     </div>
-    <div class="secreset"><button type="button" onclick="resetSec('stage')">↻ ② 처음 국면으로 되돌리기</button></div>
+    <div class="secreset"><button type="button" onclick="resetSec('stage')">↻ ① 처음 국면으로 되돌리기</button></div>
+  </div>
+
+  <!-- ══ ② 어느 가닥을 베끼는가 ══ -->
+  <div class="card split" id="cardStrand" data-hub-card="s2">
+    <h2 class="dna">② 어느 가닥을 베끼는가<span class="yr">교과서 61·63쪽</span></h2>
+    <div class="panes">
+      <div class="pane-l">
+        <div class="stage-wrap"><svg class="stage" id="stStage" viewBox="0 0 700 300" xmlns="http://www.w3.org/2000/svg" role="img"
+             aria-label="이중가닥 DNA 와 왼쪽 끝의 프로모터. 두 가닥 가운데 하나를 골라 만들어지는 RNA 의 처음 세 염기를 확인하는 무대"></svg></div>
+        <ul class="slg">
+          <li><span class="mk mk-prom"></span>프로모터 — RNA 중합효소가 결합하는 곳</li>
+          <li><span class="mk mk-dna"></span>DNA 두 가닥</li>
+          <li><span class="mk mk-rna"></span>새로 만들어지는 RNA</li>
+        </ul>
+      </div>
+      <div class="pane-r">
+        <div class="pr-do">
+          <div class="taskbar">두 가닥 가운데 <b>주형으로 쓰이는 가닥</b>을 고르시오.</div>
+          <div class="panel">
+            <div class="ptitle">🔎 판단의 근거</div>
+            <p>RNA 중합효소는 <b>프로모터</b>에 결합한 뒤 한쪽으로 나아가면서, 주형을 <b>3′ 쪽에서부터</b> 읽고 RNA 를 <b>5′ → 3′</b> 방향으로 잇는다.</p>
+            <ul>
+              <li>프로모터는 유전자의 <b>왼쪽 끝</b>에 있다 → 중합효소는 오른쪽으로 나아간다</li>
+              <li>그러므로 <b>왼쪽 끝이 3′ 인 가닥</b>이 주형이다</li>
+            </ul>
+          </div>
+          <div class="btnrow">
+            <button type="button" class="btn dna ghost" id="btnTop" onclick="pickStrand(1)">위 가닥을 주형으로</button>
+            <button type="button" class="btn dna ghost" id="btnBot" onclick="pickStrand(2)">아래 가닥을 주형으로</button>
+          </div>
+          <div id="strandVerdict"></div>
+          <div class="msg hide" id="fb_strand"></div>
+        </div>
+        <div class="pr-q"><div id="strandQ"></div></div>
+      </div>
+    </div>
+    <div class="secreset"><button type="button" onclick="resetSec('strand')">↻ ② 다시 하기</button></div>
   </div>
 
   <!-- ══ ③ 직접 전사하기 ══ -->
@@ -733,8 +733,8 @@ function emptyRna(){
 }
 function freshState(){
   return {
-    strand:0,            /* ① 0 = 아직 안 골랐다 · 1 = 위 가닥(주형) · 2 = 아래 가닥 */
-    stageSeen:false,     /* ② 마지막 국면까지 봤는가 */
+    strand:0,            /* ② 0 = 아직 안 골랐다 · 1 = 위 가닥(주형) · 2 = 아래 가닥 */
+    stageSeen:false,     /* ① 마지막 국면까지 봤는가 */
     rna:emptyRna(),      /* ③ 이은 염기 — 왼쪽부터 빈틈없이 찬다 */
     manual:0,            /* ③ 직접 이은 칸 수 */
     usedAuto:false,      /* ③ 자동 전사를 썼는가 */
@@ -806,8 +806,8 @@ function loadState(){
 /* ══════════════════ 4. 진행 레일 · 완료 판정 ══════════════════
    ★막는 데 쓰지 않는다. 카드는 처음부터 다 열려 있다(2026-09-01 규약). */
 var STEPS = [
-  { key:'strand', no:'①', name:'어느 가닥을 베끼는가', sub:'주형 가닥 고르기',   cls:'dna'  },
-  { key:'stage',  no:'②', name:'개시 · 신장 · 종결',  sub:'RNA 중합효소',       cls:'pol'  },
+  { key:'stage',  no:'①', name:'개시 · 신장 · 종결',  sub:'RNA 중합효소',       cls:'pol'  },
+  { key:'strand', no:'②', name:'어느 가닥을 베끼는가', sub:'주형 가닥 고르기',   cls:'dna'  },
   { key:'grid',   no:'③', name:'직접 전사하기',       sub:'A 에는 U',           cls:'rna'  },
   { key:'result', no:'④', name:'복제와 무엇이 다른가', sub:'세 줄 견주기',       cls:'dna'  },
   { key:'rna',    no:'⑤', name:'RNA 는 한 종류가 아니다', sub:'mRNA·rRNA·tRNA', cls:'ribo' },
@@ -855,7 +855,7 @@ function updateRail(){
   if (b) b.textContent = '진행 ' + doneCount() + ' / ' + STEPS.length;
 }
 
-/* ══════════════════ 5. ① 어느 가닥을 베끼는가 — 무대 ══════════════════
+/* ══════════════════ 5. ② 어느 가닥을 베끼는가 — 무대 ══════════════════
    ★연출이 없는 무대다. 고른 값이 바뀔 때 통째로 다시 그린다.
    ★여기서 U 가 처음 나온다 — 나오는 그 자리에서 「A 에는 T 가 아니라 U」를 함께 말한다. */
 var ST = { x0:160, pitch:34, yTopL:108, yBotL:152, yRibT:84, yRibB:176, yRna:220,
@@ -967,7 +967,7 @@ function renderStrand(){
   if (b2) b2.className = 'btn dna' + (state.strand === 2 ? '' : ' ghost');
 }
 
-/* ══════════════════ 6. ② 개시 · 신장 · 종결 — 연출 무대 (chromolab 방식) ══════════════════
+/* ══════════════════ 6. ① 개시 · 신장 · 종결 — 연출 무대 (chromolab 방식) ══════════════════
    ★물체마다 g 를 한 번만 짓고, 국면이 바뀌면 transform·opacity 만 바꾼다. 다시 그리지 않는다.
    ★한 국면에 한 사건. 국면 번호를 코드에 숫자로 박지 않고 이름 상수를 쓴다.
    ★타이머를 쓰지 않는다 — ▶ 를 누를 때만 국면이 바뀐다. */
@@ -2027,9 +2027,9 @@ function unlockDraft(){
      ④ 는 ③ 이 만든 RNA 위에서만 뜻이 있는 결과이기 때문이다.
    ★확인 대화상자는 잃을 것이 큰 칸에만 — 직접 이은 ③ 과 손으로 적은 ⑦. */
 var SEC_DEF = {
-  strand: { qs:function(){ return Q_STRAND; }, ask:false, fb:'fb_strand', msg:'① 에서 고른 가닥과 문항을 지웠다.',
+  strand: { qs:function(){ return Q_STRAND; }, ask:false, fb:'fb_strand', msg:'② 에서 고른 가닥과 문항을 지웠다.',
             run:function(){ state.strand = 0; } },
-  stage:  { qs:function(){ return Q_STAGE; },  ask:false, fb:'fb_stage',  msg:'② 를 처음 국면으로 되돌리고 문항을 지웠다.',
+  stage:  { qs:function(){ return Q_STAGE; },  ask:false, fb:'fb_stage',  msg:'① 을 처음 국면으로 되돌리고 문항을 지웠다.',
             run:function(){ state.stageSeen = false; ANI.ph = 0; } },
   grid:   { qs:function(){ return Q_GRID; },   ask:true,  fb:'fb_grid',   msg:'③ 에서 이은 RNA 와 문항을 지웠다 — 다시 이으시오. ④ 도 함께 지웠다.',
             run:function(){
